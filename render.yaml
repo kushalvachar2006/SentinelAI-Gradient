@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: sentinelai-node-service
+    env: node
+    root: server
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+
+  - type: web
+    name: sentinelai-python-service
+    env: python
+    root: server
+    buildCommand: pip install -r app/requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
