@@ -26,13 +26,21 @@ router.get(
     query('to').optional().isISO8601(),
     query('sourceIP').optional().isString(),
     query('assignedTo').optional().isString(),
-    query('sort').optional().isIn(['riskScore', 'timestamp', 'detectedAt', 'severity']),
+    query('sort')
+  .optional()
+  .isIn([
+    'riskScore',
+    'timestamp',
+    'detectedAt',
+    'createdAt',
+    'severity',
+  ]),
   ],
   asyncHandler(async (req, res) => {
     const {
       page = 1, limit = 25, severity, status, type,
       from, to, sourceIP, assignedTo,
-      sort = 'detectedAt', order = 'desc',
+      sort = 'createdAt', order = 'desc',
     } = req.query;
 
     const filter = {};
