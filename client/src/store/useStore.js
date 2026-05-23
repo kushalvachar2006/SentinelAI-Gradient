@@ -78,17 +78,35 @@ export const useStore = create((set, get) => ({
   },
 
   refreshThreats: async () => {
-    try {
-      const res = await fetch(`${API}/api/threats?limit=50&sort=riskScore`, {
+  try {
+    const res = await fetch(
+      `${API}/api/threats?limit=50&sort=createdAt&order=desc&ts=${Date.now()}`,
+      {
         headers: AUTH,
-        ...NO_CACHE,
-      });
-      const data = await res.json();
-      set({ threats: data.threats || data });
-    } catch (e) {
-      console.warn("Refresh failed:", e);
-    }
-  },
+        cache: "no-store",
+      }
+    );
+
+    const data = await res.json();
+
+    const threats = data.threats || data || [];
+
+    threats.sort(
+      (a, b) =>
+        new Date(
+          b.createdAt || b.detectedAt || b.timestamp
+        ) -
+        new Date(
+          a.createdAt || a.detectedAt || a.timestamp
+        )
+    );
+
+    set({ threats });
+
+  } catch (e) {
+    console.warn("Refresh failed:", e);
+  }
+},
 
   // ── Computed ──────────────────────────────────────────────────────────────
   filteredThreats: () => {
