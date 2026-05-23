@@ -29,7 +29,7 @@ function ProgressBar({ percent, color }) {
 
 export default function Ingest() {
   const navigate = useNavigate();
-  const { loadDashboard } = useStore();
+  const { loadDashboard, refreshThreats } = useStore();
   const [dragging, setDragging] = useState(false);
   const [files, setFiles] = useState([]);
   const [format, setFormat] = useState('Syslog');
@@ -75,6 +75,8 @@ export default function Ingest() {
           const job = await jobRes.json();
           if (job.status === 'completed') {
             clearInterval(poll);
+            await refreshThreats();
+
             setJobResult(job);
             setStage('done');
           } else if (job.status === 'failed') {
@@ -95,9 +97,21 @@ export default function Ingest() {
   };
 
   const handleViewDashboard = async () => {
+  try {
+
+    // First refresh latest threats
+    await refreshThreats();
+
+    // Then fully load analytics/dashboard
     await loadDashboard();
+
+    // Navigate only AFTER fresh data exists
     navigate('/dashboard');
-  };
+
+  } catch (err) {
+    console.error("Dashboard load failed:", err);
+  }
+};
 
   const reset = () => { setStage('idle'); setFiles([]); setJobResult(null); setErrorMsg(''); };
 
