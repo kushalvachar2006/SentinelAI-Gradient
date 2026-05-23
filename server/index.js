@@ -102,7 +102,6 @@ app.use("/api/auth", authRoutes);
 app.use("/api/demo", demoRoutes);
 
 // ─── Protected Routes ──────────────────────────────────────────────────────────
-app.use("/api/logs/ingest", logRoutes);
 app.use("/api/logs", authenticate, logRoutes);
 app.use("/api/threats", authenticate, threatRoutes);
 app.use("/api/analytics", authenticate, analyticsRoutes);

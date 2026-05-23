@@ -143,6 +143,7 @@ router.post(
     });
   })
 );
+router.use(authenticate);
 
 /**
  * GET /api/logs/jobs/:jobId
