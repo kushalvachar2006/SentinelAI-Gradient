@@ -6,6 +6,7 @@ const { LogJob } = require('../models/Incident');
 const { logIngestLimiter } = require('../middleware/rateLimiter');
 const { asyncHandler, createError } = require('../middleware/errorHandler');
 const logger = require('../utils/logger');
+const { authenticate } = require("../middleware/auth");
 
 const router = express.Router();
 
