@@ -536,7 +536,6 @@ export default function Dashboard() {
                   style={{
                     padding: "5px 14px",
                     borderRadius: "var(--radius-sm)",
-                    border: "none",
                     background: active ? `${col}18` : "transparent",
                     color: active ? col : "var(--text-muted)",
                     fontSize: "10px",
