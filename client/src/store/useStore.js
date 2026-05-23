@@ -49,7 +49,7 @@ export const useStore = create((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const [threatsRes, analyticsRes] = await Promise.all([
-        fetch(`${API}/api/threats?limit=50&sort=riskScore`, {
+        fetch(`${API}/api/threats?limit=50&sort=createdAt&order=desc&ts=${Date.now()}`, {
           headers: AUTH,
           ...NO_CACHE,
         }),
