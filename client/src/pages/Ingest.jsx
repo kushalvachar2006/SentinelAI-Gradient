@@ -5,7 +5,7 @@ import { Upload, FileText, CheckCircle, X, AlertCircle, Zap } from 'lucide-react
 import Navbar from '../components/layout/Navbar';
 import { useStore } from '../store/useStore';
 
-const API = import.meta.env.VITE_API_URL || '';
+const API = import.meta.env.VITE_API_URL || 'https://sentinelai-gradient.onrender.com';
 const AUTH_HEADER = 'Bearer demo-token';
 const FORMATS = ['Syslog', 'AWS CloudTrail', 'Custom JSON', 'CEF', 'LEEF'];
 
