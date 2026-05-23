@@ -29,15 +29,11 @@ import { useStore } from "../store/useStore";
 
 function RealTimeClock() {
   const [time, setTime] = useState(new Date());
+
   useEffect(() => {
-  refreshThreats();
-
-  const interval = setInterval(() => {
-    refreshThreats();
-  }, 5000);
-
-  return () => clearInterval(interval);
-}, []);
+    const i = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(i);
+  }, []);
   return (
     <div
       style={{
@@ -280,6 +276,16 @@ export default function Dashboard() {
 
   const { trendData, trendRangeLabel } = buildTrendSeries(allThreats);
   const assetData = buildAssetSeries(allThreats);
+
+useEffect(() => {
+  refreshThreats();
+
+  const interval = setInterval(() => {
+    refreshThreats();
+  }, 5000);
+
+  return () => clearInterval(interval);
+}, []);
 
   return (
     <div
