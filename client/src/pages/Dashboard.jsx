@@ -30,9 +30,14 @@ import { useStore } from "../store/useStore";
 function RealTimeClock() {
   const [time, setTime] = useState(new Date());
   useEffect(() => {
-    const i = setInterval(() => setTime(new Date()), 1000);
-    return () => clearInterval(i);
-  }, []);
+  refreshThreats();
+
+  const interval = setInterval(() => {
+    refreshThreats();
+  }, 5000);
+
+  return () => clearInterval(interval);
+}, []);
   return (
     <div
       style={{
