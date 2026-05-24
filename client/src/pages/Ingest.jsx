@@ -53,7 +53,9 @@ function ThreatRow({ threat, onClick }) {
 import Navbar from '../components/layout/Navbar';
 import { useStore } from '../store/useStore';
 
-const API = import.meta.env.VITE_API_URL || 'https://sentinelai-gradient.onrender.com';
+// Empty string = relative URL → Vite dev proxy forwards /api/* to localhost:3001
+// Set VITE_API_URL in .env only for production deployments
+const API = import.meta.env.VITE_API_URL || '';
 const AUTH_HEADER = 'Bearer demo-token';
 const FORMATS = ['Syslog', 'AWS CloudTrail', 'Custom JSON', 'CEF', 'LEEF'];
 
@@ -97,9 +99,32 @@ export default function Ingest() {
     if (selected.length) setFiles(selected);
   };
 
+  // Render free tier sleeps after inactivity — poll /health until the service responds
+  const waitForBackend = async (maxWaitMs = 30000) => {
+    const start = Date.now();
+    while (Date.now() - start < maxWaitMs) {
+      try {
+        const r = await fetch(`${API}/health`);
+        if (r.ok) return true;
+      } catch (_) {}
+      await new Promise(res => setTimeout(res, 2000));
+    }
+    return false;
+  };
+
   const handleAnalyse = async () => {
     if (!files[0]) return;
     setStage('uploading');
+    setErrorMsg('Waking up backend…');
+
+    const alive = await waitForBackend(30000);
+    if (!alive) {
+      setStage('error');
+      setErrorMsg('Backend did not respond after 30s. Check your Render service.');
+      return;
+    }
+    setErrorMsg('');
+
     const formData = new FormData();
     formData.append('logfile', files[0]);
     formData.append('source', format.toLowerCase().replace(' ', '_'));

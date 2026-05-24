@@ -1,6 +1,8 @@
 import { create } from "zustand";
 
-const API = import.meta.env.VITE_API_URL || "https://sentinelai-gradient.onrender.com";
+// Empty string = relative URL → Vite dev proxy forwards /api/* to localhost:3001
+// Set VITE_API_URL in .env only for production deployments
+const API = import.meta.env.VITE_API_URL || '';
 const NO_CACHE = { cache: "no-store" };
 
 // Demo auth header — matches the backend DEMO_MODE / demo-token bypass
