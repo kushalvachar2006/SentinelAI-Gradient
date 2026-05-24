@@ -27,42 +27,77 @@ const upload = multer({
 });
 
 /**
+ * Converts an array of items into log line strings.
+ * If an item has a `rawLogs` array, emit those strings directly
+ * (they are the actual log lines the Python parser understands).
+ * Otherwise stringify the whole object.
+ */
+function flattenItems(items) {
+  const lines = [];
+  for (const item of items) {
+    if (typeof item === 'string') {
+      lines.push(item);
+    } else if (item && Array.isArray(item.rawLogs) && item.rawLogs.length > 0) {
+      // Emit metadata as context, then each raw log line individually
+      const meta = { ...item };
+      delete meta.rawLogs;
+      lines.push(JSON.stringify(meta));
+      for (const raw of item.rawLogs) {
+        lines.push(typeof raw === 'string' ? raw : JSON.stringify(raw));
+      }
+    } else {
+      lines.push(JSON.stringify(item));
+    }
+  }
+  return lines;
+}
+
+/**
  * Parses file content into an array of log line strings.
- * Handles: JSON arrays, NDJSON (one JSON obj per line), plain text lines.
+ *
+ * Handles all input shapes:
+ *  1. JSON array of objects  → each object becomes one JSON string line
+ *  2. JSON object with a list field (alerts/logs/events/records/data/items/threats)
+ *     → unwrap the array and treat each element as a line
+ *  3. Single JSON object     → one line
+ *  4. NDJSON                 → one object per line already
+ *  5. Plain text             → split by newline
  */
 function parseFileToLogLines(content, filename) {
   const ext = filename.split('.').pop().toLowerCase();
 
   if (ext === 'json') {
-    // Try parsing as a JSON array of objects
+    let parsed;
     try {
-      const parsed = JSON.parse(content);
-      if (Array.isArray(parsed)) {
-        // Each element becomes a JSON string line for the Python parser
-        return parsed.map(item =>
-          typeof item === 'string' ? item : JSON.stringify(item)
-        );
-      }
-      // Single JSON object
-      if (typeof parsed === 'object' && parsed !== null) {
-        return [JSON.stringify(parsed)];
-      }
+      parsed = JSON.parse(content);
     } catch (_) {
-      // Not valid JSON array — fall through to NDJSON / line-by-line
+      // Not valid JSON — fall through to NDJSON / line-by-line
+      const lines = content.split('\n').filter(l => l.trim());
+      const ndjson = lines.filter(l => {
+        try { JSON.parse(l); return true; } catch (_) { return false; }
+      });
+      return ndjson.length > 0 ? ndjson : lines;
     }
 
-    // Try NDJSON: one JSON object per line
-    const lines = content.split('\n').filter(l => l.trim());
-    const ndjsonLines = lines.filter(l => {
-      try { JSON.parse(l); return true; } catch (_) { return false; }
-    });
-    if (ndjsonLines.length > 0) return ndjsonLines;
+    // Shape 1: top-level array
+    if (Array.isArray(parsed)) {
+      return flattenItems(parsed);
+    }
 
-    // Plain text fallback
-    return lines;
+    // Shape 2: object wrapping a list under a known key
+    if (typeof parsed === 'object' && parsed !== null) {
+      const listKeys = ['alerts', 'logs', 'events', 'records', 'data', 'items', 'threats', 'entries'];
+      for (const key of listKeys) {
+        if (Array.isArray(parsed[key])) {
+          return flattenItems(parsed[key]);
+        }
+      }
+      // Shape 3: single object — one line
+      return [JSON.stringify(parsed)];
+    }
   }
 
-  // For all other formats: split by newline
+  // Non-JSON: split by newline
   return content.split('\n').filter(line => line.trim());
 }
 
