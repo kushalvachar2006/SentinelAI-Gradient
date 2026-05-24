@@ -78,28 +78,42 @@ app.set("io", io);
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use(compression());
 app.use(cors(corsOptions));
+
 app.use((req, res, next) => {
   res.header(
     "Access-Control-Allow-Origin",
-    "https://sentinelai-kva.netlify.app",
+    "https://sentinelai-kva.netlify.app"
   );
+
   res.header(
     "Access-Control-Allow-Headers",
-    "Origin, X-Requested-With, Content-Type, Accept, Authorization",
+    "Origin, X-Requested-With, Content-Type, Accept, Authorization"
   );
+
   res.header(
     "Access-Control-Allow-Methods",
-    "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+    "GET, POST, PUT, PATCH, DELETE, OPTIONS"
   );
+
+  // VERY IMPORTANT
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
+
   next();
 });
+
 app.options("*", cors(corsOptions));
+
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+
+// MOVE RATE LIMITER BELOW
+app.use(globalRateLimiter);
 app.use(
   morgan("combined", { stream: { write: (msg) => logger.info(msg.trim()) } }),
 );
-app.use(globalRateLimiter);
+
 
 // ─── Health Check ──────────────────────────────────────────────────────────────
 app.get("/health", (req, res) => {
