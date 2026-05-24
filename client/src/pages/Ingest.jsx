@@ -132,7 +132,7 @@ export default function Ingest() {
     try {
       const res = await fetch(`${API}/api/logs/ingest`, {
         method: 'POST',
-        headers: { 'Authorization': AUTH_HEADER },
+        
         body: formData,
       });
       const data = await res.json();
@@ -143,7 +143,7 @@ export default function Ingest() {
       const poll = setInterval(async () => {
         try {
           const jobRes = await fetch(`${API}/api/logs/jobs/${jobId}`, {
-            headers: { 'Authorization': AUTH_HEADER },
+            
           });
           const job = await jobRes.json();
           if (job.status === 'completed') {
@@ -154,7 +154,7 @@ export default function Ingest() {
             try {
               const threatsRes = await fetch(
                 `${API}/api/threats?limit=50&sort=createdAt&order=desc&ts=${Date.now()}`,
-                { headers: { 'Authorization': AUTH_HEADER }, cache: 'no-store' }
+                {  cache: 'no-store' }
               );
               const threatsData = await threatsRes.json();
               const freshThreats = (threatsData.threats || threatsData || []).slice(0, job.threatsDetected || 10);
