@@ -102,7 +102,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/demo", demoRoutes);
 
 // ─── Protected Routes ──────────────────────────────────────────────────────────
-app.use("/api/logs", authenticate, logRoutes);
+app.use("/api/logs", logRoutes);
 app.use("/api/threats", authenticate, threatRoutes);
 app.use("/api/analytics", authenticate, analyticsRoutes);
 app.use("/api/chat", authenticate, chatRoutes);
