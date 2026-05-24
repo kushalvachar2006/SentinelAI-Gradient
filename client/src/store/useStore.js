@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-const API = import.meta.env.VITE_API_URL || "";
+const API = import.meta.env.VITE_API_URL || "https://sentinelai-gradient.onrender.com";
 const NO_CACHE = { cache: "no-store" };
 
 // Demo auth header — matches the backend DEMO_MODE / demo-token bypass
