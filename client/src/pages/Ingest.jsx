@@ -56,7 +56,6 @@ import { useStore } from '../store/useStore';
 // Empty string = relative URL → Vite dev proxy forwards /api/* to localhost:3001
 // Set VITE_API_URL in .env only for production deployments
 const API = import.meta.env.VITE_API_URL || '';
-const AUTH_HEADER = 'Bearer demo-token';
 const FORMATS = ['Syslog', 'AWS CloudTrail', 'Custom JSON', 'CEF', 'LEEF'];
 
 function ProgressBar({ percent, color }) {
@@ -132,7 +131,6 @@ export default function Ingest() {
     try {
       const res = await fetch(`${API}/api/logs/ingest`, {
         method: 'POST',
-        
         body: formData,
       });
       const data = await res.json();
@@ -142,9 +140,7 @@ export default function Ingest() {
 
       const poll = setInterval(async () => {
         try {
-          const jobRes = await fetch(`${API}/api/logs/jobs/${jobId}`, {
-            
-          });
+          const jobRes = await fetch(`${API}/api/logs/jobs/${jobId}`);
           const job = await jobRes.json();
           if (job.status === 'completed') {
             clearInterval(poll);
@@ -154,7 +150,7 @@ export default function Ingest() {
             try {
               const threatsRes = await fetch(
                 `${API}/api/threats?limit=50&sort=createdAt&order=desc&ts=${Date.now()}`,
-                {  cache: 'no-store' }
+                { cache: 'no-store' }
               );
               const threatsData = await threatsRes.json();
               const freshThreats = (threatsData.threats || threatsData || []).slice(0, job.threatsDetected || 10);
