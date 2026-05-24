@@ -13,6 +13,173 @@ const SUGGESTED = [
   'Which assets are most targeted?',
 ];
 
+// Lightweight markdown → JSX renderer (no external library needed)
+function MarkdownContent({ text }) {
+  if (!text) return null;
+
+  const lines = text.split('\n');
+  const elements = [];
+  let i = 0;
+  let keyCounter = 0;
+  const key = () => keyCounter++;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Code block
+    if (line.startsWith('```')) {
+      const codeLines = [];
+      i++;
+      while (i < lines.length && !lines[i].startsWith('```')) {
+        codeLines.push(lines[i]);
+        i++;
+      }
+      elements.push(
+        <pre key={key()} style={{
+          background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,107,0,0.15)',
+          borderRadius: '6px', padding: '12px 14px', overflowX: 'auto',
+          fontFamily: 'var(--font-mono)', fontSize: '12px',
+          color: 'var(--eclipse)', margin: '10px 0', lineHeight: 1.6,
+        }}>
+          <code>{codeLines.join('\n')}</code>
+        </pre>
+      );
+      i++;
+      continue;
+    }
+
+    // Heading ## or ###
+    if (line.startsWith('### ')) {
+      elements.push(
+        <div key={key()} style={{ fontSize: '13px', fontWeight: 700, color: 'var(--eclipse)', margin: '12px 0 4px', fontFamily: 'var(--font-display)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          {renderInline(line.slice(4))}
+        </div>
+      );
+      i++; continue;
+    }
+    if (line.startsWith('## ')) {
+      elements.push(
+        <div key={key()} style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)', margin: '14px 0 6px', borderBottom: '1px solid rgba(255,107,0,0.12)', paddingBottom: '4px' }}>
+          {renderInline(line.slice(3))}
+        </div>
+      );
+      i++; continue;
+    }
+    if (line.startsWith('# ')) {
+      elements.push(
+        <div key={key()} style={{ fontSize: '16px', fontWeight: 700, color: 'var(--eclipse)', margin: '14px 0 6px' }}>
+          {renderInline(line.slice(2))}
+        </div>
+      );
+      i++; continue;
+    }
+
+    // Horizontal rule
+    if (line.match(/^[-*]{3,}$/)) {
+      elements.push(<hr key={key()} style={{ border: 'none', borderTop: '1px solid rgba(255,107,0,0.12)', margin: '12px 0' }} />);
+      i++; continue;
+    }
+
+    // Bullet list
+    if (line.match(/^[-*+] /) || line.match(/^\d+\. /)) {
+      const listItems = [];
+      const isOrdered = line.match(/^\d+\. /);
+      while (i < lines.length && (lines[i].match(/^[-*+] /) || lines[i].match(/^\d+\. /))) {
+        const content = lines[i].replace(/^[-*+] /, '').replace(/^\d+\. /, '');
+        listItems.push(
+          <li key={key()} style={{ marginBottom: '4px', paddingLeft: '4px' }}>
+            {renderInline(content)}
+          </li>
+        );
+        i++;
+      }
+      const ListTag = isOrdered ? 'ol' : 'ul';
+      elements.push(
+        <ListTag key={key()} style={{
+          margin: '8px 0', paddingLeft: '20px',
+          color: 'var(--text-primary)', fontSize: '14px', lineHeight: 1.7,
+        }}>
+          {listItems}
+        </ListTag>
+      );
+      continue;
+    }
+
+    // Blockquote
+    if (line.startsWith('> ')) {
+      elements.push(
+        <div key={key()} style={{
+          borderLeft: '3px solid var(--eclipse)', paddingLeft: '12px',
+          margin: '8px 0', color: 'var(--text-secondary)', fontStyle: 'italic',
+        }}>
+          {renderInline(line.slice(2))}
+        </div>
+      );
+      i++; continue;
+    }
+
+    // Empty line → spacer
+    if (line.trim() === '') {
+      elements.push(<div key={key()} style={{ height: '6px' }} />);
+      i++; continue;
+    }
+
+    // Normal paragraph
+    elements.push(
+      <p key={key()} style={{ margin: '0 0 4px', lineHeight: 1.75, color: 'var(--text-primary)', fontSize: '14px' }}>
+        {renderInline(line)}
+      </p>
+    );
+    i++;
+  }
+
+  return <div>{elements}</div>;
+}
+
+function renderInline(text) {
+  // Split on bold/italic/inline-code/links patterns
+  const parts = [];
+  const pattern = /(\*\*(.+?)\*\*|__(.+?)__|`([^`]+)`|\*(.+?)\*|_(.+?)_|\[(.+?)\]\((.+?)\))/g;
+  let last = 0;
+  let match;
+  let idx = 0;
+
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > last) {
+      parts.push(<span key={idx++}>{text.slice(last, match.index)}</span>);
+    }
+    if (match[2] || match[3]) {
+      // Bold
+      parts.push(<strong key={idx++} style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{match[2] || match[3]}</strong>);
+    } else if (match[4]) {
+      // Inline code
+      parts.push(
+        <code key={idx++} style={{
+          background: 'rgba(255,107,0,0.12)', border: '1px solid rgba(255,107,0,0.2)',
+          borderRadius: '4px', padding: '1px 6px', fontFamily: 'var(--font-mono)',
+          fontSize: '12px', color: 'var(--eclipse)',
+        }}>{match[4]}</code>
+      );
+    } else if (match[5] || match[6]) {
+      // Italic
+      parts.push(<em key={idx++} style={{ color: 'var(--text-secondary)' }}>{match[5] || match[6]}</em>);
+    } else if (match[7] && match[8]) {
+      // Link
+      parts.push(
+        <a key={idx++} href={match[8]} target="_blank" rel="noopener noreferrer"
+          style={{ color: 'var(--eclipse)', textDecoration: 'underline' }}>
+          {match[7]}
+        </a>
+      );
+    }
+    last = pattern.lastIndex;
+  }
+  if (last < text.length) {
+    parts.push(<span key={idx++}>{text.slice(last)}</span>);
+  }
+  return parts.length ? parts : text;
+}
+
 function TypingIndicator() {
   return (
     <div style={{ display: 'flex', gap: '5px', padding: '4px 0', alignItems: 'center' }}>
@@ -186,13 +353,15 @@ export default function Chat() {
                     border: msg.role === 'user'
                       ? '1px solid rgba(255,107,0,0.25)'
                       : '1px solid rgba(255,107,0,0.08)',
-                    fontSize: '14px',
                     color: 'var(--text-primary)',
                     lineHeight: 1.7,
                     boxShadow: msg.role === 'user' ? '0 0 20px rgba(255,107,0,0.08)' : '0 2px 12px rgba(0,0,0,0.3)',
-                    whiteSpace: 'pre-wrap',
                   }}>
-                    {msg.content}
+                    {msg.role === 'user' ? (
+                      <span style={{ fontSize: '14px' }}>{msg.content}</span>
+                    ) : (
+                      <MarkdownContent text={msg.content} />
+                    )}
                   </div>
                 </motion.div>
               ))}
@@ -226,7 +395,7 @@ export default function Chat() {
             backdropFilter: 'blur(12px)',
           }}>
             <div style={{
-              display: 'flex', gap: '12px', alignItems: 'flex-end',
+              display: 'flex', gap: '12px', alignItems: 'center',
               background: 'var(--bg-surface)',
               border: '1px solid rgba(255,107,0,0.15)',
               borderRadius: 'var(--radius-lg)',

@@ -10,186 +10,14 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from "recharts";
-import { Calendar, TrendingUp, Clock, CheckCircle } from "lucide-react";
+import { Calendar, TrendingUp, Clock, CheckCircle, RefreshCw, Trash2 } from "lucide-react";
 import Navbar from "../components/layout/Navbar";
 
 const API = import.meta.env.VITE_API_URL || "";
 const AUTH_HEADERS = { Authorization: "Bearer demo-token" };
 const NO_CACHE = { cache: "no-store" };
-const THREAT_PAGE_LIMIT = 200;
 
-const getThreatTimestamp = (threat) => {
-  const value =
-    threat?.timestamp ||
-    threat?.createdAt ||
-    threat?.created_at ||
-    threat?.detectedAt ||
-    threat?.detected_at;
-  if (!value) return null;
 
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-};
-
-const getThreatType = (threat) =>
-  threat?.threatType || threat?.eventType || threat?._id || "unknown";
-
-const buildAnalyticsFromThreats = (threats) => {
-  if (!Array.isArray(threats) || threats.length === 0) {
-    return {
-      summary: {
-        totalThreats: 0,
-        openCritical: 0,
-        meanTimeToDetectMinutes: null,
-        truePositiveRate: null,
-        avgRiskScore: 0,
-        maxRiskScore: 0,
-      },
-      charts: {
-        threatTimeline: [],
-        threatTypeBreakdown: [],
-      },
-    };
-  }
-
-  const parsedThreats = threats
-    .map((threat) => ({
-      ...threat,
-      timestampValue: getThreatTimestamp(threat),
-      severityValue: String(threat?.severity || "low").toLowerCase(),
-      typeValue: getThreatType(threat),
-      riskValue: Number(threat?.riskScore ?? 0),
-    }))
-    .filter((threat) => threat.timestampValue);
-
-  const sortedThreats = [...parsedThreats].sort(
-    (a, b) => a.timestampValue - b.timestampValue,
-  );
-
-  const maxTime = sortedThreats.at(-1)?.timestampValue;
-  const minTime = sortedThreats[0]?.timestampValue;
-  const useHourly =
-    maxTime && minTime ? maxTime - minTime <= 24 * 60 * 60 * 1000 : false;
-  const bucketSizeMs = useHourly ? 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
-  const bucketCount = useHourly ? 24 : 7;
-
-  const endBucketStart = new Date(maxTime || Date.now());
-  if (useHourly) {
-    endBucketStart.setMinutes(0, 0, 0);
-  } else {
-    endBucketStart.setHours(0, 0, 0, 0);
-  }
-
-  const startTime = new Date(
-    endBucketStart.getTime() - (bucketCount - 1) * bucketSizeMs,
-  );
-  const timelineBuckets = Array.from({ length: bucketCount }, () => ({
-    total: 0,
-    critical: 0,
-  }));
-
-  const typeBuckets = new Map();
-  let totalRisk = 0;
-  let riskCount = 0;
-  let totalDetectMinutes = 0;
-  let detectCount = 0;
-  let falsePositiveCount = 0;
-  let openCritical = 0;
-
-  sortedThreats.forEach((threat) => {
-    const bucketIndex = Math.floor(
-      (threat.timestampValue - startTime.getTime()) / bucketSizeMs,
-    );
-    if (bucketIndex >= 0 && bucketIndex < bucketCount) {
-      timelineBuckets[bucketIndex].total += 1;
-      if (threat.severityValue === "critical") {
-        timelineBuckets[bucketIndex].critical += 1;
-      }
-    }
-
-    if (threat.severityValue === "critical" && threat.status === "open") {
-      openCritical += 1;
-    }
-
-    if (Number.isFinite(threat.riskValue)) {
-      totalRisk += threat.riskValue;
-      riskCount += 1;
-    }
-
-    const detectedAtValue = new Date(
-      threat.detectedAt || threat.detected_at || threat.createdAt || threat.created_at,
-    );
-    if (!Number.isNaN(detectedAtValue.getTime())) {
-      const detectMinutes = (detectedAtValue - threat.timestampValue) / 60000;
-      if (Number.isFinite(detectMinutes) && detectMinutes >= 0) {
-        totalDetectMinutes += detectMinutes;
-        detectCount += 1;
-      }
-    }
-
-    if (threat.status === "dismissed" || threat.isFalsePositive) {
-      falsePositiveCount += 1;
-    }
-
-    const typeKey = threat.typeValue || "unknown";
-    const current = typeBuckets.get(typeKey) || {
-      type: typeKey,
-      count: 0,
-      riskTotal: 0,
-      riskCount: 0,
-    };
-    current.count += 1;
-    current.riskTotal += Number.isFinite(threat.riskValue) ? threat.riskValue : 0;
-    current.riskCount += Number.isFinite(threat.riskValue) ? 1 : 0;
-    typeBuckets.set(typeKey, current);
-  });
-
-  return {
-    summary: {
-      totalThreats: threats.length,
-      openCritical,
-      meanTimeToDetectMinutes:
-        detectCount > 0 ? Math.round(totalDetectMinutes / detectCount) : null,
-      truePositiveRate:
-        threats.length > 0
-          ? Math.round(((threats.length - falsePositiveCount) / threats.length) * 100)
-          : null,
-      avgRiskScore: riskCount > 0 ? (totalRisk / riskCount).toFixed(1) : 0,
-      maxRiskScore: sortedThreats.reduce(
-        (max, threat) => Math.max(max, threat.riskValue || 0),
-        0,
-      ),
-    },
-    charts: {
-      threatTimeline: timelineBuckets.map((bucket, index) => {
-        const bucketTime = new Date(
-          startTime.getTime() + index * bucketSizeMs,
-        );
-        return {
-          date: useHourly
-            ? bucketTime.toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })
-            : bucketTime.toLocaleDateString([], {
-                month: "short",
-                day: "numeric",
-              }),
-          count: bucket.total,
-          critical: bucket.critical,
-        };
-      }),
-      threatTypeBreakdown: [...typeBuckets.values()]
-        .sort((a, b) => b.count - a.count)
-        .map((entry) => ({
-          type: entry.type,
-          count: entry.count,
-          avgRisk:
-            entry.riskCount > 0 ? Math.round(entry.riskTotal / entry.riskCount) : 0,
-        })),
-    },
-  };
-};
 
 export default function Analytics() {
   const [isLoading, setIsLoading] = useState(true);
@@ -200,30 +28,50 @@ export default function Analytics() {
     setIsLoading(true);
     setError(null);
     try {
-      let page = 1;
-      let allThreats = [];
-      let totalPages = 1;
+      // Use the backend's pre-aggregated analytics endpoint directly
+      const res = await fetch(`${API}/api/analytics`, {
+        headers: AUTH_HEADERS,
+        ...NO_CACHE,
+      });
+      if (!res.ok) throw new Error(`Failed to load analytics (${res.status})`);
+      const data = await res.json();
 
-      while (page <= totalPages) {
-        const res = await fetch(
-          `${API}/api/threats?limit=${THREAT_PAGE_LIMIT}&page=${page}&sort=timestamp&order=desc`,
-          {
-            headers: AUTH_HEADERS,
-            ...NO_CACHE,
-          },
-        );
-        if (!res.ok) throw new Error(`Failed to load threats (${res.status})`);
+      // Map backend response shape → internal analytics shape
+      const summary = data.summary || {};
+      const charts = data.charts || {};
 
-        const data = await res.json();
-        const threats = Array.isArray(data?.threats) ? data.threats : [];
-        allThreats = allThreats.concat(threats);
-        totalPages = Number(data?.pagination?.pages || 1);
-        page += 1;
-      }
+      // Backend doesn't compute truePositiveRate — derive from statusBreakdown
+      const statusBreakdown = charts.statusBreakdown || [];
+      const dismissed = statusBreakdown.find(s => s.status === 'dismissed')?.count || 0;
+      const total = summary.totalThreats || 0;
+      const truePositiveRate = total > 0 ? Math.round(((total - dismissed) / total) * 100) : null;
 
-      setAnalytics(buildAnalyticsFromThreats(allThreats));
+      setAnalytics({
+        summary: {
+          totalThreats: summary.totalThreats ?? 0,
+          openCritical: summary.openCritical ?? 0,
+          meanTimeToDetectMinutes: summary.meanTimeToDetectMinutes ?? null,
+          truePositiveRate,
+          avgRiskScore: summary.avgRiskScore ?? 0,
+          maxRiskScore: summary.maxRiskScore ?? 0,
+        },
+        charts: {
+          // threatTimeline from backend: [{ _id: "2025-05-24", total, critical, high, medium, low }]
+          threatTimeline: (charts.threatTimeline || []).map(d => ({
+            date: d._id,
+            count: d.total || 0,
+            critical: d.critical || 0,
+          })),
+          // threatTypeBreakdown from backend: [{ type, count, avgRisk }]
+          threatTypeBreakdown: (charts.threatTypeBreakdown || []).map(d => ({
+            type: d.type || d._id || 'unknown',
+            count: d.count || 0,
+            avgRisk: d.avgRisk || 0,
+          })),
+        },
+      });
     } catch (err) {
-      setError(err?.message || "Something went wrong while loading threats.");
+      setError(err?.message || "Something went wrong while loading analytics.");
     } finally {
       setIsLoading(false);
     }
@@ -312,42 +160,74 @@ export default function Analytics() {
           zIndex: 1,
         }}
       >
-        <div style={{ marginBottom: "22px" }}>
-          <div
-            style={{
-              fontSize: "11px",
-              color: "var(--text-muted)",
-              fontFamily: "var(--font-mono)",
-              letterSpacing: "0.12em",
-              marginBottom: "8px",
-            }}
-          >
-            ANALYTICS OVERVIEW
+        <div style={{ marginBottom: "22px", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
+          <div>
+            <div
+              style={{
+                fontSize: "11px",
+                color: "var(--text-muted)",
+                fontFamily: "var(--font-mono)",
+                letterSpacing: "0.12em",
+                marginBottom: "8px",
+              }}
+            >
+              ANALYTICS OVERVIEW
+            </div>
+            <h1
+              style={{
+                fontSize: "26px",
+                fontFamily: "var(--font-display)",
+                fontWeight: 700,
+                letterSpacing: "0.02em",
+                color: "var(--text-primary)",
+              }}
+            >
+              Security Analytics
+            </h1>
+            <p
+              style={{
+                color: "var(--text-secondary)",
+                fontSize: "14px",
+                lineHeight: 1.6,
+                marginTop: "8px",
+                maxWidth: "720px",
+              }}
+            >
+              A simple, human‑friendly summary of security activity. Use this page
+              to understand what happened, how fast it was detected, and which
+              threats are most common.
+            </p>
           </div>
-          <h1
-            style={{
-              fontSize: "26px",
-              fontFamily: "var(--font-display)",
-              fontWeight: 700,
-              letterSpacing: "0.02em",
-              color: "var(--text-primary)",
-            }}
-          >
-            Security Analytics
-          </h1>
-          <p
-            style={{
-              color: "var(--text-secondary)",
-              fontSize: "14px",
-              lineHeight: 1.6,
-              marginTop: "8px",
-              maxWidth: "720px",
-            }}
-          >
-            A simple, human‑friendly summary of security activity. Use this page
-            to understand what happened, how fast it was detected, and which
-            threats are most common.
-          </p>
+          <div style={{ display: "flex", gap: "10px", alignItems: "center", paddingTop: "28px", flexShrink: 0 }}>
+            <button
+              onClick={loadAnalytics}
+              disabled={isLoading}
+              className="eclipse-btn-secondary"
+              style={{ padding: "9px 16px", fontSize: "12px", display: "flex", alignItems: "center", gap: "6px", opacity: isLoading ? 0.5 : 1 }}
+            >
+              <RefreshCw size={13} style={{ animation: isLoading ? "spin 1s linear infinite" : "none" }} />
+              Refresh
+            </button>
+            <button
+              onClick={async () => {
+                if (!window.confirm("This will delete ALL threat records from the database and start fresh. Are you sure?")) return;
+                try {
+                  await fetch(`${API}/api/threats/clear-all`, {
+                    method: "DELETE",
+                    headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
+                  });
+                  await loadAnalytics();
+                } catch (e) {
+                  alert("Clear failed: " + e.message);
+                }
+              }}
+              className="eclipse-btn-secondary"
+              style={{ padding: "9px 16px", fontSize: "12px", display: "flex", alignItems: "center", gap: "6px", borderColor: "rgba(255,61,113,0.25)", color: "var(--sev-critical)" }}
+            >
+              <Trash2 size={13} />
+              Clear All Data
+            </button>
+          </div>
         </div>
 
         {isLoading && !hasData && (

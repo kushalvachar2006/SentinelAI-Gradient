@@ -44,28 +44,38 @@ export const useStore = create((set, get) => ({
     }
   },
 
-  // ── The main load trigger — called by "Analyse" button ───────────────────
+  // ── Fetch ALL threats across pages (backend page size = 1000) ───────────────
+  _fetchAllThreats: async () => {
+    const PAGE = 1000;
+    let page = 1,
+      allItems = [];
+    while (true) {
+      const res = await fetch(
+        `${API}/api/threats?limit=${PAGE}&page=${page}&sort=riskScore&order=desc&ts=${Date.now()}`,
+        { headers: AUTH, ...NO_CACHE },
+      );
+      if (!res.ok) throw new Error(`Failed to fetch threats: ${res.status}`);
+      const data = await res.json();
+      const items = data.threats || data || [];
+      allItems = allItems.concat(items);
+      // Stop when we have all pages
+      const total = data.pagination?.total ?? items.length;
+      if (allItems.length >= total || items.length === 0) break;
+      page++;
+    }
+    return allItems;
+  },
+
+  // ── The main load trigger — called on mount ────────────────────────────────
   loadDashboard: async () => {
     set({ isLoading: true, error: null });
     try {
-      const [threatsRes, analyticsRes] = await Promise.all([
-        fetch(`${API}/api/threats?limit=50&sort=createdAt&order=desc&ts=${Date.now()}`, {
-          headers: AUTH,
-          ...NO_CACHE,
-        }),
-        fetch(`${API}/api/analytics`, {
-          headers: AUTH,
-          ...NO_CACHE,
-        }),
+      const store = get();
+      const [threatItems, analyticsRes] = await Promise.all([
+        store._fetchAllThreats(),
+        fetch(`${API}/api/analytics`, { headers: AUTH, ...NO_CACHE }),
       ]);
-
-      const threatsData = await threatsRes.json();
       const analyticsData = analyticsRes.ok ? await analyticsRes.json() : null;
-      const threatItems = threatsData.threats || threatsData || [];
-
-      if (!threatsRes.ok)
-        throw new Error(`Failed to fetch threats: ${threatsRes.status}`);
-
       set({
         threats: threatItems,
         analytics: analyticsData,
@@ -78,35 +88,34 @@ export const useStore = create((set, get) => ({
   },
 
   refreshThreats: async () => {
-  try {
-    const res = await fetch(
-      `${API}/api/threats?limit=50&sort=createdAt&order=desc&ts=${Date.now()}`,
-      {
+    try {
+      const store = get();
+      const threats = await store._fetchAllThreats();
+      set({ threats, isLoaded: true });
+    } catch (e) {
+      console.warn("Refresh failed:", e);
+    }
+  },
+
+  clearAllData: async () => {
+    try {
+      await fetch(`${API}/api/threats/clear-all`, {
+        method: "DELETE",
         headers: AUTH,
-        cache: "no-store",
-      }
-    );
-
-    const data = await res.json();
-
-    const threats = data.threats || data || [];
-
-    threats.sort(
-      (a, b) =>
-        new Date(
-          b.createdAt || b.detectedAt || b.timestamp
-        ) -
-        new Date(
-          a.createdAt || a.detectedAt || a.timestamp
-        )
-    );
-
-    set({ threats });
-
-  } catch (e) {
-    console.warn("Refresh failed:", e);
-  }
-},
+      });
+      // Reset all data state immediately
+      set({
+        threats: [],
+        analytics: null,
+        isLoaded: false,
+        activeFilter: "ALL",
+        selectedThreat: null,
+        slideOverOpen: false,
+      });
+    } catch (e) {
+      console.warn("Clear failed:", e);
+    }
+  },
 
   // ── Computed ──────────────────────────────────────────────────────────────
   filteredThreats: () => {

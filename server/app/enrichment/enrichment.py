@@ -148,20 +148,29 @@ async def lookup_virustotal_hash(file_hash: str) -> dict:
 
 # ─── MaxMind GeoIP ────────────────────────────────────────────────────────────
 _geo_reader = None
+_geo_reader_attempted = False  # sentinel — try once, never log again on failure
 
 
 def _get_geo_reader():
-    global _geo_reader
+    global _geo_reader, _geo_reader_attempted
     if _geo_reader is not None:
         return _geo_reader
+    if _geo_reader_attempted:
+        return None
+
+    _geo_reader_attempted = True
+
+    if not settings.MAXMIND_DB_PATH:
+        log.info("maxmind_skipped", reason="MAXMIND_DB_PATH not configured")
+        return None
 
     try:
         import geoip2.database
-        if settings.MAXMIND_DB_PATH:
-            _geo_reader = geoip2.database.Reader(settings.MAXMIND_DB_PATH)
-            log.info("maxmind_loaded", path=settings.MAXMIND_DB_PATH)
+        _geo_reader = geoip2.database.Reader(settings.MAXMIND_DB_PATH)
+        log.info("maxmind_loaded", path=settings.MAXMIND_DB_PATH)
     except Exception as e:
-        log.warning("maxmind_unavailable", error=str(e))
+        log.warning("maxmind_unavailable", error=str(e),
+                    hint="GeoIP disabled. Download GeoLite2-City.mmdb and set MAXMIND_DB_PATH.")
 
     return _geo_reader
 

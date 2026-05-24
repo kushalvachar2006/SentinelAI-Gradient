@@ -1,7 +1,55 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Upload, FileText, CheckCircle, X, AlertCircle, Zap } from 'lucide-react';
+import { Upload, FileText, CheckCircle, X, AlertCircle, Zap, ShieldAlert } from 'lucide-react';
+
+const SEV_COLOR = {
+  CRITICAL: 'var(--sev-critical)',
+  HIGH: 'var(--sev-high)',
+  MEDIUM: 'var(--sev-medium)',
+  LOW: 'var(--sev-low)',
+};
+
+function ThreatRow({ threat, onClick }) {
+  const sev = (threat.severity || 'LOW').toUpperCase();
+  const color = SEV_COLOR[sev] || 'var(--sev-low)';
+  const title = (threat.threatType || threat.eventType || 'Unknown Threat')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, m => m.toUpperCase());
+  const ip = threat.sourceIP || threat.sourceIp || '—';
+  const target = threat.targetAsset || threat.target || '—';
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        display: 'flex', alignItems: 'center', gap: '12px',
+        padding: '10px 14px',
+        borderRadius: 'var(--radius-md)',
+        border: `1px solid ${color}22`,
+        background: `${color}08`,
+        cursor: 'pointer',
+        transition: 'all 0.15s',
+        marginBottom: '6px',
+      }}
+      onMouseEnter={e => e.currentTarget.style.background = `${color}14`}
+      onMouseLeave={e => e.currentTarget.style.background = `${color}08`}
+    >
+      <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0, boxShadow: `0 0 6px ${color}` }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</div>
+        <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+          {ip} → {target}
+        </div>
+      </div>
+      <div style={{ fontSize: '10px', fontWeight: 700, color, fontFamily: 'var(--font-mono)', textTransform: 'uppercase', flexShrink: 0 }}>{sev}</div>
+      {threat.riskScore != null && (
+        <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>
+          {Math.round(threat.riskScore)}
+        </div>
+      )}
+    </div>
+  );
+}
 import Navbar from '../components/layout/Navbar';
 import { useStore } from '../store/useStore';
 
@@ -77,7 +125,18 @@ export default function Ingest() {
             clearInterval(poll);
             await refreshThreats();
 
-            setJobResult(job);
+            // Fetch the actual threats that were just ingested
+            try {
+              const threatsRes = await fetch(
+                `${API}/api/threats?limit=50&sort=createdAt&order=desc&ts=${Date.now()}`,
+                { headers: { 'Authorization': AUTH_HEADER }, cache: 'no-store' }
+              );
+              const threatsData = await threatsRes.json();
+              const freshThreats = (threatsData.threats || threatsData || []).slice(0, job.threatsDetected || 10);
+              setJobResult({ ...job, detectedThreats: freshThreats });
+            } catch (_) {
+              setJobResult(job);
+            }
             setStage('done');
           } else if (job.status === 'failed') {
             clearInterval(poll);
@@ -286,6 +345,7 @@ export default function Ingest() {
                 boxShadow: '0 0 30px rgba(0,208,132,0.05), var(--shadow-card)',
               }}
             >
+              {/* Header */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '24px' }}>
                 <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(0,208,132,0.1)', border: '1px solid rgba(0,208,132,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 12px rgba(0,208,132,0.2)' }}>
                   <CheckCircle size={22} color="var(--sev-low)" />
@@ -296,10 +356,11 @@ export default function Ingest() {
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: '12px', marginBottom: '28px' }}>
+              {/* Stats */}
+              <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
                 {[
                   { label: 'Lines Processed', value: jobResult.linesProcessed?.toLocaleString() || '—' },
-                  { label: 'Threats Detected', value: jobResult.threatsDetected || '—' },
+                  { label: 'Threats Detected', value: jobResult.threatsDetected ?? '—' },
                 ].map(({ label, value }) => (
                   <div key={label} style={{
                     flex: 1,
@@ -312,6 +373,44 @@ export default function Ingest() {
                 ))}
               </div>
 
+              {/* Detected threats list */}
+              {jobResult.detectedThreats && jobResult.detectedThreats.length > 0 && (
+                <div style={{ marginBottom: '24px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                    <ShieldAlert size={14} color="var(--eclipse)" />
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                      Detected Threats
+                    </span>
+                  </div>
+                  <div style={{ maxHeight: '280px', overflowY: 'auto', paddingRight: '4px' }}>
+                    {jobResult.detectedThreats.map((threat, i) => (
+                      <ThreatRow
+                        key={threat._id || i}
+                        threat={threat}
+                        onClick={() => {}}
+                      />
+                    ))}
+                  </div>
+                  {jobResult.threatsDetected > jobResult.detectedThreats.length && (
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: '8px', textAlign: 'center' }}>
+                      + {jobResult.threatsDetected - jobResult.detectedThreats.length} more in dashboard
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* No threats message */}
+              {jobResult.threatsDetected === 0 && (
+                <div style={{
+                  marginBottom: '24px', padding: '14px 18px',
+                  background: 'rgba(0,208,132,0.04)', border: '1px solid rgba(0,208,132,0.12)',
+                  borderRadius: 'var(--radius-md)', fontSize: '13px', color: 'var(--text-secondary)',
+                }}>
+                  No threats detected in this log file. Your environment looks clean.
+                </div>
+              )}
+
+              {/* Actions */}
               <div style={{ display: 'flex', gap: '12px' }}>
                 <button onClick={handleViewDashboard} className="eclipse-btn-primary" style={{ padding: '12px 24px', fontSize: '14px', flex: 1 }}>
                   View in Dashboard →

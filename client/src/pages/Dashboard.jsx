@@ -17,6 +17,7 @@ import {
   RefreshCw,
   Activity,
   Shield,
+  Trash2,
 } from "lucide-react";
 import Navbar from "../components/layout/Navbar";
 import {
@@ -258,16 +259,30 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const {
     threats: allThreats,
-    filteredThreats,
     activeFilter,
     setFilter,
     setSelectedThreat,
     dismissThreat,
-    counts,
     refreshThreats,
+    loadDashboard,
+    clearAllData,
+    isLoading,
   } = useStore();
-  const threats = filteredThreats();
-  const c = counts();
+
+  // Compute inline so they re-derive reactively whenever allThreats or activeFilter changes
+  const threats =
+    activeFilter === "ALL"
+      ? allThreats
+      : allThreats.filter(
+          (t) => (t.severity || "").toUpperCase() === activeFilter
+        );
+
+  const c = {
+    CRITICAL: allThreats.filter((t) => (t.severity || "").toUpperCase() === "CRITICAL").length,
+    HIGH:     allThreats.filter((t) => (t.severity || "").toUpperCase() === "HIGH").length,
+    MEDIUM:   allThreats.filter((t) => (t.severity || "").toUpperCase() === "MEDIUM").length,
+    LOW:      allThreats.filter((t) => (t.severity || "").toUpperCase() === "LOW").length,
+  };
   const totalAlerts = c.CRITICAL + c.HIGH + c.MEDIUM + c.LOW;
   const topThreat = threats[0];
   const highlightSeverity = getSeverity(topThreat?.severity);
@@ -278,11 +293,13 @@ export default function Dashboard() {
   const assetData = buildAssetSeries(allThreats);
 
 useEffect(() => {
-  refreshThreats();
+  // Load fresh data immediately on mount (fetches both threats + analytics)
+  loadDashboard();
 
+  // Then keep threats refreshed every 10s
   const interval = setInterval(() => {
     refreshThreats();
-  }, 5000);
+  }, 10000);
 
   return () => clearInterval(interval);
 }, []);
@@ -567,6 +584,28 @@ useEffect(() => {
             })}
             <div style={{ flex: 1 }} />
             <button
+              onClick={async () => {
+                if (!window.confirm("Delete ALL threat records and job history? This cannot be undone.")) return;
+                await clearAllData();
+              }}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: "var(--sev-critical)",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+                fontSize: "10px",
+                fontFamily: "var(--font-mono)",
+                opacity: 0.7,
+                marginRight: "12px",
+              }}
+              title="Clear all threat data"
+            >
+              <Trash2 size={10} /> Clear data
+            </button>
+            <button
               onClick={() => refreshThreats()}
               style={{
                 background: "none",
@@ -612,7 +651,22 @@ useEffect(() => {
 
           {/* Rows */}
           <div style={{ maxHeight: "calc(100vh - 380px)", overflowY: "auto" }}>
-            {!threats.length ? (
+            {isLoading && !threats.length ? (
+              <div
+                style={{
+                  padding: "18px",
+                  fontSize: "12px",
+                  color: "var(--eclipse)",
+                  fontFamily: "var(--font-mono)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                }}
+              >
+                <span style={{ animation: "glow-pulse 1.5s ease-in-out infinite" }}>◈</span>
+                Loading threats from server...
+              </div>
+            ) : !threats.length ? (
               <div
                 style={{
                   padding: "18px",

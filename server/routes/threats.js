@@ -18,7 +18,7 @@ router.get(
   '/',
   [
     query('page').optional().isInt({ min: 1 }),
-    query('limit').optional().isInt({ min: 1, max: 200 }),
+    query('limit').optional().isInt({ min: 1, max: 1000 }),
     query('severity').optional().isIn(['critical', 'high', 'medium', 'low', 'info']),
     query('status').optional().isIn(['open', 'investigating', 'resolved', 'dismissed', 'false_positive']),
     query('type').optional().isString(),
@@ -268,6 +268,24 @@ router.get('/:id/predict', asyncHandler(async (req, res) => {
   );
 
   res.json(response.data);
+}));
+
+/**
+ * DELETE /api/threats/clear-all
+ * Wipe all threat records AND log job history — allows starting fresh after ingesting real data
+ */
+router.delete('/clear-all', asyncHandler(async (req, res) => {
+  const { LogJob } = require('../models/Incident');
+  const [threatResult, jobResult] = await Promise.all([
+    Threat.deleteMany({}),
+    LogJob.deleteMany({}),
+  ]);
+  logger.info(`All data cleared by ${req.user?.email || 'demo'}: ${threatResult.deletedCount} threats, ${jobResult.deletedCount} jobs removed`);
+  res.json({
+    deleted: threatResult.deletedCount,
+    jobsDeleted: jobResult.deletedCount,
+    message: 'All threat records and log jobs cleared',
+  });
 }));
 
 module.exports = router;

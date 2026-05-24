@@ -61,6 +61,14 @@ GENERATION_CONFIG = genai_types.GenerateContentConfig(
     max_output_tokens=2048,
 ) if GENAI_AVAILABLE else None
 
+# ── Rate-limit guard ──────────────────────────────────────────────────────────
+# Allow only 1 Gemini call at a time. This prevents the Windows
+# "too many file descriptors in select()" crash that occurs when hundreds of
+# /agent/explain requests are fired simultaneously.
+# Combined with queueService.js serialising calls 13s apart, this keeps
+# throughput safely under the free-tier limit of 5 req/min.
+_gemini_semaphore = asyncio.Semaphore(1)
+
 
 # ── Core generate call ────────────────────────────────────────────────────────
 
@@ -70,23 +78,36 @@ async def _generate(prompt: str, system: str = "") -> str:
 
     full_prompt = f"{system}\n\n{prompt}" if system else prompt
 
-    try:
-        response = await asyncio.get_event_loop().run_in_executor(
-            None,
-            lambda: _client.models.generate_content(
-                model=MODEL_NAME,
-                contents=full_prompt,
-                config=GENERATION_CONFIG,
-            ),
-        )
-        text = response.text.strip() if response.text else ""
-        if text:
-            return text
-        logger.warning("Gemini returned empty text")
-        return "AI returned an empty response. Please try again."
-    except Exception as exc:
-        logger.error("Gemini generate error: %s", exc)
-        raise RuntimeError(str(exc))
+    # Retry up to 3 times with exponential back-off on 429 / RESOURCE_EXHAUSTED
+    max_retries = 3
+    for attempt in range(max_retries):
+        async with _gemini_semaphore:
+            try:
+                response = await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    lambda: _client.models.generate_content(
+                        model=MODEL_NAME,
+                        contents=full_prompt,
+                        config=GENERATION_CONFIG,
+                    ),
+                )
+                text = response.text.strip() if response.text else ""
+                if text:
+                    return text
+                logger.warning("Gemini returned empty text")
+                return "AI returned an empty response. Please try again."
+            except Exception as exc:
+                err_str = str(exc)
+                is_rate_limit = "429" in err_str or "RESOURCE_EXHAUSTED" in err_str
+                if is_rate_limit and attempt < max_retries - 1:
+                    wait = 60 * (attempt + 1)  # 60s, 120s
+                    logger.warning("Gemini rate-limited (attempt %d/%d) — retrying in %ds",
+                                   attempt + 1, max_retries, wait)
+                    await asyncio.sleep(wait)
+                    continue
+                logger.error("Gemini generate error: %s", exc)
+                raise RuntimeError(err_str)
+    raise RuntimeError("Gemini rate limit exceeded after retries")
 
 
 async def _embed(text: str) -> list[float]:
