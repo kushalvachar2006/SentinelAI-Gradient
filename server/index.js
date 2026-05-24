@@ -30,34 +30,12 @@ const { errorHandler } = require("./middleware/errorHandler");
 const app = express();
 const server = http.createServer(app);
 
-const DEFAULT_ALLOWED_ORIGINS = [
-  "https://sentinelai-kva.netlify.app",
-  "http://localhost:3000",
-  "http://localhost:5173",
-  "http://127.0.0.1:5173",
-];
+// Trust Render's reverse proxy so express-rate-limit sees real client IPs
+app.set("trust proxy", 1);
 
-const envOrigins = [process.env.FRONTEND_URL, process.env.CORS_ORIGINS]
-  .filter(Boolean)
-  .flatMap((value) =>
-    value
-      .split(",")
-      .map((origin) => origin.trim())
-      .filter(Boolean),
-  );
-
-const ALLOWED_ORIGINS = Array.from(
-  new Set([...DEFAULT_ALLOWED_ORIGINS, ...envOrigins]),
-);
-
+// MVP: open CORS — restrict origins before production
 const corsOptions = {
-  origin: (origin, callback) => {
-    // Allow requests with no origin (curl/Postman/health checks)
-    if (!origin || ALLOWED_ORIGINS.includes(origin))
-      return callback(null, true);
-    return callback(new Error(`CORS blocked for origin: ${origin}`));
-  },
-  credentials: true,
+  origin: "*",
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
 };
@@ -65,9 +43,8 @@ const corsOptions = {
 // Socket.io setup with CORS
 const io = new Server(server, {
   cors: {
-    origin: ALLOWED_ORIGINS,
+    origin: "*",
     methods: ["GET", "POST"],
-    credentials: true,
   },
 });
 
@@ -85,12 +62,10 @@ app.options("*", cors(corsOptions));
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
-// MOVE RATE LIMITER BELOW
 app.use(globalRateLimiter);
 app.use(
   morgan("combined", { stream: { write: (msg) => logger.info(msg.trim()) } }),
 );
-
 
 // ─── Health Check ──────────────────────────────────────────────────────────────
 app.get("/health", (req, res) => {
@@ -122,15 +97,12 @@ app.use(errorHandler);
 async function bootstrap() {
   const PORT = process.env.PORT || 3001;
 
-  // Try MongoDB — don't crash if unavailable in dev/demo
   try {
     await connectMongo();
     logger.info("MongoDB connected ✓");
   } catch (err) {
     logger.error("⚠️  MongoDB connection failed:", err.message);
-    logger.warn(
-      "Starting in OFFLINE mode — DB operations will fail gracefully",
-    );
+    logger.warn("Starting in OFFLINE mode — DB operations will fail gracefully");
   }
 
   try {
@@ -141,18 +113,10 @@ async function bootstrap() {
   }
 
   server.listen(PORT, () => {
-    logger.info(
-      `✅ SentinelAI Node service running on http://localhost:${PORT}`,
-    );
-    logger.info(
-      `   Demo mode: ${process.env.DEMO_MODE === "true" ? "ON" : "OFF"}`,
-    );
-    logger.info(
-      `   Python AI: ${process.env.PYTHON_SERVICE_URL || "http://localhost:8000"}`,
-    );
-    logger.info(
-      `   Gemini fallback: ${process.env.GEMINI_API_KEY ? "CONFIGURED ✓" : "not set"}`,
-    );
+    logger.info(`✅ SentinelAI Node service running on http://localhost:${PORT}`);
+    logger.info(`   Demo mode: ${process.env.DEMO_MODE === "true" ? "ON" : "OFF"}`);
+    logger.info(`   Python AI: ${process.env.PYTHON_SERVICE_URL || "http://localhost:8000"}`);
+    logger.info(`   Gemini fallback: ${process.env.GEMINI_API_KEY ? "CONFIGURED ✓" : "not set"}`);
   });
 }
 
