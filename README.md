@@ -1,6 +1,5 @@
 <div align="center">
 
-<img src="public/favicon.svg" width="80" height="80" alt="SentinelAI Logo" />
 
 # SentinelAI-Gradient
 
