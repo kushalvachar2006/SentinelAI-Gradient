@@ -32,12 +32,21 @@ const server = http.createServer(app);
 
 // Trust Render's reverse proxy so express-rate-limit sees real client IPs
 app.set("trust proxy", 1);
+app.use((req, res, next) => {
+  console.log("REQ:", req.method, req.url);
+  console.log("ORIGIN:", req.headers.origin);
+  next();
+});
 
 // MVP: open CORS — restrict origins before production
 const corsOptions = {
-  origin: "*",
+  origin: [
+    "http://localhost:5173",
+    "https://sentinelai-kva.netlify.app"
+  ],
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
+  allowedHeaders: "*",
+  credentials: false,
 };
 
 // Socket.io setup with CORS
@@ -62,7 +71,6 @@ app.options("*", cors(corsOptions));
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
-app.use(globalRateLimiter);
 app.use(
   morgan("combined", { stream: { write: (msg) => logger.info(msg.trim()) } }),
 );
@@ -78,6 +86,7 @@ app.get("/health", (req, res) => {
   });
 });
 
+app.use(globalRateLimiter);
 // ─── Public Routes ─────────────────────────────────────────────────────────────
 app.use("/api/auth", authRoutes);
 app.use("/api/demo", demoRoutes);
