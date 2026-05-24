@@ -9,6 +9,7 @@ const logger = require('../utils/logger');
 const { authenticate } = require("../middleware/auth");
 
 const router = express.Router();
+router.use(authenticate);
 
 // Multer config: accept log files up to 100MB
 const upload = multer({
@@ -68,7 +69,7 @@ function parseFileToLogLines(content, filename) {
 /**
  * POST /api/logs/ingest
  * Accepts file upload OR JSON payload, dispatches to Python service
- */
+*/
 router.post(
   '/ingest',
   logIngestLimiter,
@@ -144,7 +145,6 @@ router.post(
     });
   })
 );
-router.use(authenticate);
 
 /**
  * GET /api/logs/jobs/:jobId
